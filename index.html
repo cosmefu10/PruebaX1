@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Phonolab — Análisis de Audio</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #F5F6F2; color: #1C2B27; font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
+
+  h1 { font-family: 'Fraunces', Georgia, serif; font-weight: 560; font-size: 34px; letter-spacing: -0.01em; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  #app { max-width: 980px; margin: 0 auto; padding: 28px 18px 64px; }
+
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+  header span { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A6660; }
+
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+
+  .btn { font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600; padding: 10px 18px;
+         border-radius: 8px; cursor: pointer; border: none; transition: opacity .15s; }
+  .btn:hover { opacity: .85; }
+  .btn-primary { background: #1C2B27; color: #fff; }
+  .btn-record  { background: #D8491F; color: #fff; }
+  .btn-outline { background: #fff; color: #1C2B27; border: 1px solid #DCE0DA; }
+  .btn-danger  { background: #fff; color: #8C3A1E; border: 1px solid #DCE0DA; }
+
+  .panel { background: #fff; border: 1px solid #DCE0DA; border-radius: 12px; overflow: hidden; }
+
+  .section-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .12em;
+                   text-transform: uppercase; color: #5A6660; margin: 0 0 8px; }
+
+  .transport { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 16px; margin-bottom: 18px; }
+  .transport-btns { display: flex; gap: 8px; }
+  .time-display { font-family: 'IBM Plex Mono', monospace; font-size: 14px; }
+  .time-display .cur { color: #D8491F; }
+  .time-display .tot { color: #5A6660; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A6660; }
+  .stats b { color: #1C2B27; }
+
+  #canvas-wrap, #spec-wrap { position: relative; margin-bottom: 18px; }
+  canvas { width: 100%; display: block; cursor: crosshair; }
+  #waveform-canvas { background: #fff; }
+  #spec-canvas { background: #0A0618; }
+
+  .cursor-line { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid #D8491F; pointer-events: none; }
+  .cursor-line.light { border-color: #FF6B3D; }
+  .annotation-mark { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed rgba(19,94,84,0.6); pointer-events: none; }
+  .annotation-mark.light { border-left-color: rgba(255,255,255,0.5); }
+
+  #tier { position: relative; height: 56px; cursor: copy; margin-bottom: 14px;
+          background: repeating-linear-gradient(90deg, #fff 0 24px, #FBFCFA 24px 48px); }
+  #tier-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+                font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A6660; pointer-events: none; }
+  .tier-mark { position: absolute; top: 0; bottom: 0; border-left: 2px solid #135E54; pointer-events: none; }
+  .tier-label { position: absolute; top: 6px; left: 4px; font-family: 'IBM Plex Mono', monospace;
+                font-size: 11px; background: #135E54; color: #fff; padding: 2px 6px; border-radius: 4px;
+                white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+
+  #ann-list .ann-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid #DCE0DA; }
+  #ann-list .ann-row:first-child { border-top: none; }
+  .ann-time { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #135E54;
+              background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; }
+  .ann-input { flex: 1; font-family: 'Inter', sans-serif; font-size: 14px; padding: 8px 10px;
+               border: 1px solid #DCE0DA; border-radius: 8px; outline: none; background: #F5F6F2; color: #1C2B27; }
+
+  #empty-state { padding: 44px 24px; text-align: center; }
+  #empty-state h2 { font-family: 'Fraunces', Georgia, serif; font-size: 22px; margin-bottom: 8px; }
+  #empty-state p { color: #5A6660; font-size: 14px; }
+
+  #error-box { background: #FBEDE8; border: 1px solid #EAC4B6; color: #8C3A1E; border-radius: 10px;
+               padding: 10px 14px; font-size: 14px; margin-bottom: 18px; display: none; }
+
+  #rec-indicator { display: none; align-items: center; gap: 12px; padding: 14px 18px;
+                   margin-bottom: 18px; border-radius: 12px; border: 1px solid #DCE0DA; background: #fff; }
+  .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #D8491F; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  #filename { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A6660; }
+  #decoding  { font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+
+  #audio-ui { display: none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Phonolab</h1>
+    <span>onda · espectrograma · anotaciones</span>
+  </header>
+
+  <!-- source controls -->
+  <div class="row">
+    <button class="btn btn-record" id="btn-record">● Grabar</button>
+    <button class="btn btn-outline" id="btn-upload">Subir WAV / MP3</button>
+    <input type="file" id="file-input" accept="audio/*,.wav,.mp3" style="display:none" />
+    <span id="filename"></span>
+    <span id="decoding"></span>
+  </div>
+
+  <div id="error-box"></div>
+
+  <!-- recording indicator -->
+  <div id="rec-indicator" class="panel">
+    <span class="rec-dot"></span>
+    <span class="mono" style="font-size:14px">Grabando desde el micrófono — pulsa "Detener" cuando termines.</span>
+    <span id="rec-timer" class="mono" style="font-size:14px; margin-left:auto; color:#D8491F">0:00</span>
+  </div>
+
+  <!-- empty state -->
+  <div id="empty-state" class="panel">
+    <h2>Sin audio</h2>
+    <p>Graba desde el micrófono o sube un archivo WAV / MP3 para ver la onda y el espectrograma.</p>
+  </div>
+
+  <!-- main UI -->
+  <div id="audio-ui">
+    <!-- transport -->
+    <div class="panel transport">
+      <div class="transport-btns">
+        <button class="btn btn-primary" id="btn-playpause">▶ Reproducir</button>
+        <button class="btn btn-outline" id="btn-stop">■ Parar</button>
+      </div>
+      <div class="time-display">
+        <span class="cur" id="time-cur">0:00.00</span>
+        <span class="tot" id="time-tot"> / 0:00.00</span>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <!-- waveform -->
+    <p class="section-label">Onda de sonido — toca para mover el cursor</p>
+    <div id="canvas-wrap" class="panel">
+      <canvas id="waveform-canvas" width="1200" height="180"></canvas>
+      <div class="cursor-line" id="wave-cursor"></div>
+    </div>
+
+    <!-- spectrogram -->
+    <p class="section-label" id="spec-label">Espectrograma — más brillante = más fuerte</p>
+    <div id="spec-wrap" class="panel">
+      <canvas id="spec-canvas" width="1200" height="280"></canvas>
+      <div class="cursor-line light" id="spec-cursor"></div>
+    </div>
+
+    <!-- annotation tier -->
+    <p class="section-label">Capa de anotaciones — toca para añadir un marcador</p>
+    <div id="tier" class="panel">
+      <span id="tier-empty">capa vacía — toca para añadir tu primer marcador</span>
+      <div class="cursor-line" id="tier-cursor"></div>
+    </div>
+
+    <div class="row">
+      <button class="btn btn-outline" id="btn-add-marker">+ Marcador en el cursor</button>
+    </div>
+
+    <div id="ann-list" class="panel" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+// ─── helpers ────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const WAVE_W = 1200, WAVE_H = 180, SPEC_W = 1200, SPEC_H = 280;
+const FFT_SIZE = 1024, DYN_RANGE = 70;
+
+function fmtTime(s) {
+  if (!isFinite(s)) return '0:00.00';
+  const m = Math.floor(s / 60);
+  const sec = (s - m * 60).toFixed(2).padStart(5, '0');
+  return `${m}:${sec}`;
+}
+
+// ─── FFT ────────────────────────────────────────────────────
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let t=re[i];re[i]=re[j];re[j]=t; t=im[i];im[i]=im[j];im[j]=t; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2*Math.PI)/len, wr = Math.cos(ang), wi = Math.sin(ang), half = len>>1;
+    for (let i = 0; i < n; i += len) {
+      let cwr=1, cwi=0;
+      for (let j = 0; j < half; j++) {
+        const a=i+j, b=a+half;
+        const vr=re[b]*cwr - im[b]*cwi, vi=re[b]*cwi + im[b]*cwr;
+        re[b]=re[a]-vr; im[b]=im[a]-vi; re[a]+=vr; im[a]+=vi;
+        const t=cwr*wr - cwi*wi; cwi=cwr*wi + cwi*wr; cwr=t;
+      }
+    }
+  }
+}
+
+// ─── magma colormap ─────────────────────────────────────────
+const MAGMA = [[0,[8,6,24]],[0.25,[78,18,123]],[0.5,[180,54,122]],[0.75,[250,136,92]],[1,[252,250,190]]];
+function magma(t) {
+  t = Math.max(0, Math.min(1, t));
+  for (let i=1; i<MAGMA.length; i++) {
+    if (t <= MAGMA[i][0]) {
+      const [t0,c0]=MAGMA[i-1], [t1,c1]=MAGMA[i], f=(t-t0)/(t1-t0);
+      return [c0[0]+(c1[0]-c0[0])*f, c0[1]+(c1[1]-c0[1])*f, c0[2]+(c1[2]-c0[2])*f];
+    }
+  }
+  return MAGMA[MAGMA.length-1][1];
+}
+
+// ─── state ──────────────────────────────────────────────────
+let audioCtx = null, buffer = null, sourceNode = null;
+let playStartCtxTime = 0, playOffset = 0;
+let cursor = 0, isPlaying = false, rafId = null;
+let annotations = [], annIdCounter = 1;
+let recorder = null, recStream = null, recTimer = null, recSecs = 0;
+
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// ─── UI helpers ─────────────────────────────────────────────
+function showError(msg) {
+  const el = $('error-box');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function setCursor(t) {
+  cursor = buffer ? Math.max(0, Math.min(t, buffer.duration)) : 0;
+  const pct = buffer ? (cursor / buffer.duration) * 100 : 0;
+  $('wave-cursor').style.left = pct + '%';
+  $('spec-cursor').style.left = pct + '%';
+  $('tier-cursor').style.left = pct + '%';
+  $('time-cur').textContent = fmtTime(cursor);
+}
+
+function updatePlayBtn() {
+  $('btn-playpause').textContent = isPlaying ? '❚❚ Pausar' : '▶ Reproducir';
+}
+
+// ─── draw waveform ───────────────────────────────────────────
+function drawWaveform() {
+  const cv = $('waveform-canvas'), g = cv.getContext('2d');
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, WAVE_W, WAVE_H);
+  if (!buffer) {
+    g.strokeStyle = '#DCE0DA'; g.beginPath(); g.moveTo(0,WAVE_H/2); g.lineTo(WAVE_W,WAVE_H/2); g.stroke();
+    return;
+  }
+  const data = buffer.getChannelData(0);
+  const step = data.length / WAVE_W;
+  g.strokeStyle = '#135E54'; g.lineWidth = 1; g.beginPath();
+  for (let x = 0; x < WAVE_W; x++) {
+    const s=Math.floor(x*step), e=Math.floor((x+1)*step);
+    let mn=1, mx=-1;
+    for (let i=s; i<e && i<data.length; i++) { if(data[i]<mn)mn=data[i]; if(data[i]>mx)mx=data[i]; }
+    if (mn>mx) { mn=0; mx=0; }
+    const y1=((1-mx)/2)*WAVE_H, y2=((1-mn)/2)*WAVE_H;
+    g.moveTo(x+.5, y1); g.lineTo(x+.5, Math.max(y2, y1+1));
+  }
+  g.stroke();
+  g.strokeStyle = 'rgba(28,43,39,.18)'; g.beginPath(); g.moveTo(0,WAVE_H/2); g.lineTo(WAVE_W,WAVE_H/2); g.stroke();
+  // time ticks
+  g.font = '16px IBM Plex Mono, monospace'; g.fillStyle = '#5A6660';
+  const dur = buffer.duration;
+  const niceSteps = [0.1,0.25,0.5,1,2,5,10,30,60];
+  const stepT = niceSteps.find(s => dur/s <= 10) || 120;
+  for (let t=stepT; t<dur; t+=stepT) {
+    const x=(t/dur)*WAVE_W;
+    g.strokeStyle='rgba(28,43,39,.10)'; g.beginPath(); g.moveTo(x,0); g.lineTo(x,WAVE_H); g.stroke();
+    g.fillText(t<60 ? `${+t.toFixed(2)}s` : fmtTime(t), x+4, WAVE_H-8);
+  }
+}
+
+// ─── draw spectrogram ────────────────────────────────────────
+function drawSpectrogram() {
+  const cv = $('spec-canvas'), g = cv.getContext('2d');
+  g.fillStyle = '#0A0618'; g.fillRect(0,0,SPEC_W,SPEC_H);
+  if (!buffer) return;
+
+  const data = buffer.getChannelData(0), sr = buffer.sampleRate;
+  const nyquist = sr/2, maxFreq = Math.min(5000, nyquist);
+  const maxBin = Math.min(FFT_SIZE/2, Math.ceil((maxFreq/nyquist)*(FFT_SIZE/2)));
+  const cols = Math.min(1200, Math.max(1, Math.floor(data.length/256)));
+  const hop  = Math.max(1, Math.floor((data.length-FFT_SIZE)/cols)) || 1;
+  const nCols = Math.max(1, Math.min(cols, Math.floor((data.length-FFT_SIZE)/hop)+1));
+
+  const win = new Float32Array(FFT_SIZE);
+  for (let i=0;i<FFT_SIZE;i++) win[i]=0.5-0.5*Math.cos((2*Math.PI*i)/(FFT_SIZE-1));
+
+  const off=document.createElement('canvas'); off.width=nCols; off.height=maxBin;
+  const og=off.getContext('2d'), img=og.createImageData(nCols,maxBin);
+  const re=new Float32Array(FFT_SIZE), im2=new Float32Array(FFT_SIZE);
+  let globalPeak=-Infinity, globalPeakBin=0;
+
+  for (let c=0; c<nCols; c++) {
+    const start=c*hop;
+    for (let i=0;i<FFT_SIZE;i++){re[i]=(data[start+i]||0)*win[i]; im2[i]=0;}
+    fft(re,im2);
+    for (let b=0;b<maxBin;b++) {
+      const mag=Math.sqrt(re[b]*re[b]+im2[b]*im2[b]);
+      const db=20*Math.log10(mag+1e-9);
+      if (b>1 && db>globalPeak) { globalPeak=db; globalPeakBin=b; }
+      const t=Math.max(0,Math.min(1,(db+DYN_RANGE-20)/DYN_RANGE));
+      const [r,gg,bb]=magma(t);
+      const y=maxBin-1-b, idx=(y*nCols+c)*4;
+      img.data[idx]=r; img.data[idx+1]=gg; img.data[idx+2]=bb; img.data[idx+3]=255;
+    }
+  }
+  og.putImageData(img,0,0);
+  g.imageSmoothingEnabled=true; g.drawImage(off,0,0,SPEC_W,SPEC_H);
+
+  // freq grid
+  g.font='16px IBM Plex Mono, monospace';
+  const fStep=maxFreq>4000?1000:500;
+  for (let f=fStep; f<maxFreq; f+=fStep) {
+    const y=SPEC_H-(f/maxFreq)*SPEC_H;
+    g.strokeStyle='rgba(255,255,255,.14)'; g.beginPath(); g.moveTo(0,y); g.lineTo(SPEC_W,y); g.stroke();
+    g.fillStyle='rgba(255,255,255,.75)'; g.fillText(`${f/1000} kHz`, 8, y-5);
+  }
+
+  const peakHz = Math.round((globalPeakBin/(FFT_SIZE/2))*nyquist);
+  return peakHz;
+}
+
+// ─── update stats ────────────────────────────────────────────
+function updateStats(peakHz) {
+  if (!buffer) return;
+  $('time-tot').textContent = ' / ' + fmtTime(buffer.duration);
+  $('spec-label').textContent =
+    `Espectrograma — 0–${(Math.min(5000, buffer.sampleRate/2)/1000).toFixed(1)} kHz, más brillante = más fuerte`;
+  $('stats').innerHTML =
+    `<span>duración <b>${buffer.duration.toFixed(2)} s</b></span>` +
+    `<span>frecuencia <b>${buffer.sampleRate.toLocaleString()} Hz</b></span>` +
+    `<span>rango <b>0–${Math.round(buffer.sampleRate/2).toLocaleString()} Hz</b></span>` +
+    (peakHz != null ? `<span>pico <b>${peakHz.toLocaleString()} Hz</b></span>` : '');
+}
+
+// ─── load buffer ────────────────────────────────────────────
+async function loadAudio(arrayBuf, name) {
+  $('decoding').textContent = 'decodificando…';
+  showError('');
+  stopPlayback(); cursor=0;
+  annotations=[];
+  try {
+    const ctx = getCtx();
+    buffer = await ctx.decodeAudioData(arrayBuf);
+    $('filename').textContent = name;
+    $('empty-state').style.display = 'none';
+    $('audio-ui').style.display = 'block';
+    drawWaveform();
+    const peak = drawSpectrogram();
+    updateStats(peak);
+    setCursor(0);
+    renderAnnotations();
+    $('btn-add-marker').textContent = `+ Marcador en el cursor (${fmtTime(0)})`;
+  } catch(e) {
+    showError('No se pudo decodificar el audio. Prueba con un archivo WAV o MP3.');
+  }
+  $('decoding').textContent = '';
+}
+
+// ─── playback ────────────────────────────────────────────────
+function stopPlayback() {
+  if (sourceNode) { sourceNode.onended=null; try{sourceNode.stop();}catch(e){} sourceNode=null; }
+  cancelAnimationFrame(rafId);
+  isPlaying=false; updatePlayBtn();
+}
+
+function tick() {
+  if (!audioCtx||!sourceNode) return;
+  const t=playOffset+(audioCtx.currentTime-playStartCtxTime);
+  setCursor(t);
+  $('btn-add-marker').textContent = `+ Marcador en el cursor (${fmtTime(cursor)})`;
+  rafId=requestAnimationFrame(tick);
+}
+
+function playFrom(offset) {
+  if (!buffer) return;
+  stopPlayback();
+  const ctx=getCtx();
+  const src=ctx.createBufferSource();
+  src.buffer=buffer; src.connect(ctx.destination);
+  src.onended=()=>{
+    sourceNode=null; cancelAnimationFrame(rafId);
+    isPlaying=false; updatePlayBtn();
+    setCursor(buffer.duration);
+  };
+  src.start(0, offset);
+  sourceNode=src; playStartCtxTime=ctx.currentTime; playOffset=offset;
+  isPlaying=true; updatePlayBtn();
+  rafId=requestAnimationFrame(tick);
+}
+
+function onPlayPause() {
+  if (!buffer) return;
+  if (isPlaying) {
+    const t=playOffset+(audioCtx.currentTime-playStartCtxTime);
+    stopPlayback(); setCursor(t);
+  } else {
+    const start = cursor >= buffer.duration-0.01 ? 0 : cursor;
+    playFrom(start);
+  }
+}
+
+function onStop() { stopPlayback(); setCursor(0); }
+
+function seekTo(frac) {
+  if (!buffer) return;
+  const t=Math.max(0,Math.min(frac*buffer.duration, buffer.duration));
+  if (isPlaying) playFrom(t); else setCursor(t);
+  $('btn-add-marker').textContent = `+ Marcador en el cursor (${fmtTime(t)})`;
+}
+
+function canvasSeek(e, canvas) {
+  const rect=canvas.getBoundingClientRect();
+  seekTo((e.clientX-rect.left)/rect.width);
+}
+
+// ─── annotations ────────────────────────────────────────────
+function addAnnotation(time) {
+  annotations.push({ id: annIdCounter++, time, label: '' });
+  annotations.sort((a,b)=>a.time-b.time);
+  renderAnnotations();
+}
+
+function renderAnnotations() {
+  const tier=$('tier'), list=$('ann-list');
+
+  // clear old marks (keep cursor + empty label)
+  tier.querySelectorAll('.tier-mark').forEach(el=>el.remove());
+  tier.querySelectorAll('.annotation-mark').forEach(el=>el.remove());
+  $('canvas-wrap').querySelectorAll('.annotation-mark').forEach(el=>el.remove());
+  $('spec-wrap').querySelectorAll('.annotation-mark').forEach(el=>el.remove());
+
+  if (!buffer) return;
+  const dur=buffer.duration;
+
+  $('tier-empty').style.display = annotations.length ? 'none' : 'flex';
+
+  annotations.forEach(a=>{
+    const pct=(a.time/dur)*100+'%';
+
+    // tier mark
+    const m=document.createElement('div'); m.className='tier-mark'; m.style.left=pct;
+    const lb=document.createElement('span'); lb.className='tier-label';
+    lb.textContent=a.label||fmtTime(a.time); m.appendChild(lb); tier.appendChild(m);
+
+    // wave mark
+    const wm=document.createElement('div'); wm.className='annotation-mark'; wm.style.left=pct;
+    $('canvas-wrap').appendChild(wm);
+
+    // spec mark
+    const sm=document.createElement('div'); sm.className='annotation-mark light'; sm.style.left=pct;
+    $('spec-wrap').appendChild(sm);
+  });
+
+  // list
+  if (annotations.length===0) { list.style.display='none'; return; }
+  list.style.display='block';
+  list.innerHTML='';
+  annotations.forEach(a=>{
+    const row=document.createElement('div'); row.className='ann-row';
+
+    const tb=document.createElement('button'); tb.className='ann-time';
+    tb.textContent=fmtTime(a.time);
+    tb.onclick=()=>{ seekTo(a.time/dur); };
+
+    const inp=document.createElement('input'); inp.className='ann-input';
+    inp.type='text'; inp.placeholder='Etiqueta…'; inp.value=a.label;
+    inp.oninput=()=>{
+      a.label=inp.value;
+      const mark=tier.querySelectorAll('.tier-mark')[annotations.indexOf(a)];
+      if(mark) mark.querySelector('.tier-label').textContent=a.label||fmtTime(a.time);
+    };
+
+    const del=document.createElement('button'); del.className='btn btn-danger'; del.textContent='✕';
+    del.style.padding='8px 12px';
+    del.onclick=()=>{ annotations=annotations.filter(x=>x.id!==a.id); renderAnnotations(); };
+
+    row.appendChild(tb); row.appendChild(inp); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+// ─── recording ───────────────────────────────────────────────
+async function startRecording() {
+  showError('');
+  try {
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    recStream=stream;
+    const rec=new MediaRecorder(stream);
+    const chunks=[];
+    rec.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+    rec.onstop=async()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      const blob=new Blob(chunks,{type:rec.mimeType});
+      const buf=await blob.arrayBuffer();
+      loadAudio(buf,'Grabación del micrófono');
+    };
+    rec.start(); recorder=rec; recSecs=0;
+    $('rec-indicator').style.display='flex';
+    $('btn-record').textContent='■ Detener';
+    $('btn-record').classList.replace('btn-record','btn-primary');
+    recTimer=setInterval(()=>{ recSecs++; $('rec-timer').textContent=fmtTime(recSecs); },1000);
+  } catch(e) {
+    showError('El acceso al micrófono fue bloqueado. Permítelo en la configuración del navegador o sube un archivo.');
+  }
+}
+
+function stopRecording() {
+  if (recorder && recorder.state!=='inactive') recorder.stop();
+  clearInterval(recTimer); recSecs=0;
+  $('rec-indicator').style.display='none';
+  $('btn-record').textContent='● Grabar';
+  $('btn-record').classList.replace('btn-primary','btn-record');
+}
+
+// ─── event wiring ────────────────────────────────────────────
+let recording=false;
+$('btn-record').onclick=()=>{ recording=!recording; recording?startRecording():stopRecording(); };
+$('btn-upload').onclick=()=>$('file-input').click();
+$('file-input').onchange=async e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const buf=await f.arrayBuffer(); loadAudio(buf,f.name); e.target.value='';
+};
+$('btn-playpause').onclick=onPlayPause;
+$('btn-stop').onclick=onStop;
+$('btn-add-marker').onclick=()=>{ if(buffer) addAnnotation(cursor); };
+
+$('waveform-canvas').onclick=e=>canvasSeek(e,$('waveform-canvas'));
+$('spec-canvas').onclick=e=>canvasSeek(e,$('spec-canvas'));
+$('tier').onclick=e=>{ if(!buffer) return; const r=$('tier').getBoundingClientRect(); addAnnotation(((e.clientX-r.left)/r.width)*buffer.duration); };
+</script>
+</body>
+</html>
